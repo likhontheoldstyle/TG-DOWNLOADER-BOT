@@ -72,7 +72,7 @@ bot.onText(/\/start/, (msg) => {
     tg(() => bot.sendMessage(msg.chat.id,
         "👋 All-in-One Downloader\n\n" +
         "Jekono video link pathao — ami download kore dibo.\n" +
-        "📺 YouTube • 🎵 TikTok • 📘 Facebook • 📸 Instagram • 🐦 X\n\n" +
+        "📺 YouTube • 🎵 TikTok • 📘 Facebook • 📸 Instagram • 🐦 X • 📌 Pinterest\n\n" +
         "Full HD video ba MP3/M4A audio — option tomake dibo.")).catch(() => {});
 });
 
