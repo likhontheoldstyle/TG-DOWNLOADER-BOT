@@ -6,25 +6,37 @@ Paste any video link — the bot downloads it for you. No command needed.
 
 **Qualities:** 🎬 360p / 720p HD / 1080p Full HD • 🎵 MP3 128k / 320k • M4A
 
+## Project structure
+
+```
+├── bot.js              # main bot (link detect, buttons, download, upload)
+├── config.js           # BOT_TOKEN + ADMIN_IDS + MAX_SIZE
+├── social/             # one file per platform
+│   ├── youtube.js
+│   ├── facebook.js
+│   ├── instagram.js
+│   ├── tiktok.js
+│   └── twitter.js
+├── package.json
+└── run.sh              # auto-restart supervisor
+```
+
+To add a new platform, drop a new file in `social/` exporting
+`{ id, tag, match(url), extractorArgs }` — `bot.js` picks it up automatically.
+
 ## Setup
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the token.
-2. Put the token in **one** of these (priority order):
-   - `BOT_TOKEN` environment variable, or
-   - `.env` file: `BOT_TOKEN=...`, or
-   - `config.py`: `BOT_TOKEN = "..."` (copy from `config.py.example` — never commit the real one)
-3. Install dependencies and tools:
+1. Put your bot token and admin IDs in `config.js`.
+2. Install dependencies and tools:
 
 ```bash
 npm install
-# yt-dlp
 curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o ~/.local/bin/yt-dlp
 chmod +x ~/.local/bin/yt-dlp
-# ffmpeg (Debian/Ubuntu)
 sudo apt-get install -y ffmpeg
 ```
 
-4. Run:
+3. Run:
 
 ```bash
 node bot.js
@@ -32,15 +44,7 @@ node bot.js
 ./run.sh
 ```
 
-## GitHub Actions (temporary run)
-
-> Actions jobs stop after ~6 hours. For 24/7 use Render/Railway/VPS.
-
-1. Push this repo to GitHub.
-2. Repo **Settings → Secrets and variables → Actions → New repository secret**: name `BOT_TOKEN`, value = your bot token.
-3. **Actions tab → "Telegram Downloader Bot" → Run workflow**.
-
 ## Notes
 
-- Telegram Bot API allows files up to 50MB — the bot caps downloads at 48MB.
-- `config.py` with a real token must stay local (it is gitignored).
+- Telegram Bot API allows files up to 50MB — the bot caps downloads at 48MB (`MAX_SIZE` in `config.js`).
+- `ADMIN_IDS` in `config.js`: Telegram user IDs of bot admins.
