@@ -1,0 +1,3 @@
+# Copy to config.py and put your real token.
+# Or set BOT_TOKEN env var / .env file / GitHub Actions secret.
+BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
