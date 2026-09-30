@@ -6,29 +6,11 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-// load .env (BOT_TOKEN) if present
-try {
-    const envPath = path.join(__dirname, ".env");
-    if (fs.existsSync(envPath)) {
-        for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-            const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-            if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
-        }
-    }
-} catch (_) {}
+// Bot token — hardcoded
+const TOKEN = process.env.BOT_TOKEN || "8745548411:AAHcUPwcbVf9eXTc4dxDZrLTdxmhCDRbl3E";
 
-// load config.py (BOT_TOKEN = "...") if present and env not already set
-try {
-    const cfgPath = path.join(__dirname, "config.py");
-    if (!process.env.BOT_TOKEN && fs.existsSync(cfgPath)) {
-        const m = fs.readFileSync(cfgPath, "utf8").match(/^\s*BOT_TOKEN\s*=\s*["'](.+?)["']/m);
-        if (m) process.env.BOT_TOKEN = m[1].trim();
-    }
-} catch (_) {}
-
-const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
-    console.error("Set BOT_TOKEN env var (or .env / config.py) first.");
+    console.error("Bot token missing.");
     process.exit(1);
 }
 
