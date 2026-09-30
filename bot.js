@@ -39,7 +39,7 @@ async function tg(fn, retries = 3) {
     throw last;
 }
 
-const BASE = ["--extractor-args", "youtube:player_client=android", "--no-warnings", "--no-playlist"];
+const BASE = ["--extractor-args", "youtube:player_client=android,mediaconnect,web;player_skip=webpage", "--no-warnings", "--no-playlist"];
 // Telegram Bot API file limit = 50MB -> stay under it
 const MAX_SIZE = "48M";
 
@@ -103,8 +103,13 @@ bot.on("message", async (msg) => {
         const out = await ytdlp([...BASE, "--dump-json", "--no-download", url], 90000);
         info = JSON.parse(out);
     } catch (e) {
+        const msg = String(e.message || e);
+        const botcheck = /not a bot|sign in to confirm/i.test(msg);
+        const friendly = botcheck
+            ? "❌ YouTube ekhon block korteche (bot check).\nEktu pore abar try koro, ba TikTok/FB/IG link pathao."
+            : `❌ Video info pawa jayni.\n${msg.slice(0, 150)}`;
         try {
-            await tg(() => bot.editMessageText(`❌ Video info pawa jayni.\n${String(e.message).slice(0, 150)}`, { chat_id: chatId, message_id: waitMsg.message_id }));
+            await tg(() => bot.editMessageText(friendly, { chat_id: chatId, message_id: waitMsg.message_id }));
         } catch (_) {}
         return;
     }
