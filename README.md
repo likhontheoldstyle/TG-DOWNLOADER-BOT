@@ -9,14 +9,17 @@ Paste any video link — the bot downloads it for you. No command needed.
 ## Project structure
 
 ```
-├── bot.js              # main bot (link detect, buttons, download, upload)
+├── main/
+│   └── index.js          # main bot (link detect, buttons, download, upload)
 ├── config.js           # BOT_TOKEN + ADMIN_IDS + MAX_SIZE
 ├── social/             # one file per platform
 │   ├── youtube.js
 │   ├── facebook.js
 │   ├── instagram.js
 │   ├── tiktok.js
-│   └── twitter.js
+│   ├── twitter.js
+│   ├── pinterest.js
+│   └── linkedin.js
 ├── package.json
 └── run.sh              # auto-restart supervisor
 ```
@@ -39,7 +42,7 @@ sudo apt-get install -y ffmpeg
 3. Run:
 
 ```bash
-node bot.js
+node main/index.js
 # or with auto-restart:
 ./run.sh
 ```
