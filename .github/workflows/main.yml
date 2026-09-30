@@ -4,7 +4,7 @@ name: Telegram Downloader Bot
 # For 24/7 hosting use Render / Railway / a VPS instead.
 on:
   workflow_dispatch:
-    push:
+  push:
     branches: [main]
 
 jobs:
