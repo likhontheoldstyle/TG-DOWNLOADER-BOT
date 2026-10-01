@@ -79,15 +79,44 @@ function qualityKeyboard(url) {
     ];
 }
 
+function isBotCheck(e) {
+    return /sign in to confirm|not a bot/i.test(String((e && e.message) || e));
+}
+
+async function ytInfoSmart(url) {
+    const platform = detectPlatform(url);
+    try {
+        const out = await ytdlp([...platform.extractorArgs, ...BASE, "--dump-json", "--no-download", url], 90000);
+        return JSON.parse(out);
+    } catch (e) {
+        if (isBotCheck(e)) {
+            const out = await ytdlp(["--extractor-args", "youtube:player_client=android", ...BASE, "--dump-json", "--no-download", url], 90000);
+            return JSON.parse(out);
+        }
+        throw e;
+    }
+}
+
+async function ytDownloadSmart(url, optArgs, outTemplate) {
+    const platform = detectPlatform(url);
+    const base = [...platform.extractorArgs, ...BASE, ...optArgs, "--max-filesize", MAX_SIZE, "-o", outTemplate, url];
+    try {
+        await ytdlp(base);
+    } catch (e) {
+        if (isBotCheck(e)) {
+            await ytdlp(["--extractor-args", "youtube:player_client=android", ...BASE, ...optArgs, "--max-filesize", MAX_SIZE, "-o", outTemplate, url]);
+        } else throw e;
+    }
+}
+
 async function showQuality(chatId, url, waitMsg) {
     const platform = detectPlatform(url);
     let info;
     try {
-        const out = await ytdlp([...platform.extractorArgs, ...BASE, "--dump-json", "--no-download", url], 90000);
-        info = JSON.parse(out);
+        info = await ytInfoSmart(url);
     } catch (e) {
         const m = String((e && e.message) || e);
-        const friendly = /not a bot|sign in to confirm/i.test(m)
+        const friendly = isBotCheck(e)
             ? "❌ YouTube ekhon block korteche (bot check).\nEktu pore abar try koro, ba TikTok/FB/IG link pathao."
             : `❌ Video info pawa jayni.\n${m.slice(0, 150)}`;
         try { await tg(() => bot.editMessageText(friendly, { chat_id: chatId, message_id: waitMsg.message_id })); } catch (_) {}
@@ -180,7 +209,7 @@ bot.on("callback_query", async (q) => {
     const outTemplate = path.join(DL_DIR, `tg_${stamp}.%(ext)s`);
 
     try {
-        await ytdlp([...platform.extractorArgs, ...BASE, ...opt.args, "--max-filesize", MAX_SIZE, "-o", outTemplate, url]);
+        await ytDownloadSmart(url, opt.args, outTemplate);
         const found = fs.readdirSync(DL_DIR).find(f => f.startsWith(`tg_${stamp}.`));
         if (!found) throw new Error("File toiri hoyni");
         const filePath = path.join(DL_DIR, found);
