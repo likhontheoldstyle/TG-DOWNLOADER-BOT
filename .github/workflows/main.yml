@@ -1,0 +1,43 @@
+name: TG Downloader Bot
+
+"on":
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install yt-dlp
+        run: |
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod +x /usr/local/bin/yt-dlp
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start yt-dlp-api
+        run: |
+          chmod +x yt-dlp-api/run.sh
+          ./yt-dlp-api/run.sh > /tmp/yt-dlp-api.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then
+              echo "yt-dlp-api is up"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run bot
+        run: python3 bot/main.py
