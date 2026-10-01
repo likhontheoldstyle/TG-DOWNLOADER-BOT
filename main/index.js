@@ -5,6 +5,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const config = require("../config");
+const ytApi = require("../social/youtube-api");
 
 const TOKEN = config.BOT_TOKEN;
 
@@ -84,13 +85,6 @@ if (commandExists("deno")) {
 const EJS_ARGS = [
     "--remote-components",
     "ejs:github"
-];
-
-const YT_FALLBACK_CLIENTS = [
-    "android",
-    "ios",
-    "tv_embedded",
-    "mweb"
 ];
 
 const bot = new TelegramBot(TOKEN, {
@@ -400,6 +394,9 @@ const MAX_SIZE =
     config.MAX_SIZE ||
     "48M";
 
+const YT_API_ENABLED =
+    config.YT_API_ENABLED !== false;
+
 function youtubeArgs() {
 
     if (!YOUTUBE_COOKIES_FILE &&
@@ -434,177 +431,6 @@ function youtubeArgs() {
     }
 
     return args;
-}
-
-function parseSetCookie(headers, out) {
-
-    const raw = headers["set-cookie"] || [];
-
-    for (const line of raw) {
-
-        const parts = String(line).split(";");
-
-        const nv = parts[0].split("=");
-
-        const name = (nv[0] || "").trim();
-
-        if (!name) continue;
-
-        const value = nv.slice(1).join("=").trim();
-
-        let domain = ".youtube.com";
-        let path = "/";
-        let secure = false;
-        let expires = 0;
-
-        for (let i = 1; i < parts.length; i++) {
-
-            const p = parts[i].trim();
-            const eq = p.indexOf("=");
-            const k = (eq === -1 ? p : p.slice(0, eq)).trim().toLowerCase();
-            const v = eq === -1 ? "" : p.slice(eq + 1).trim();
-
-            if (k === "domain" && v) domain = v.startsWith(".") ? v : "." + v;
-            else if (k === "path" && v) path = v;
-            else if (k === "secure") secure = true;
-            else if (k === "expires" && v) {
-
-                const t = Date.parse(v);
-
-                if (!isNaN(t)) expires = Math.floor(t / 1000);
-            }
-        }
-
-        if (!expires) expires = Math.floor(Date.now() / 1000) + 3600;
-
-        out.push({ domain, path, secure, expires, name, value });
-    }
-}
-
-function fetchYouTubeCookies() {
-
-    return new Promise(resolve => {
-
-        const https = require("https");
-
-        const req = https.get(
-            "https://www.youtube.com/",
-            {
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                    "Accept": "text/html,application/xhtml+xml",
-                    "Accept-Language": "en-US,en;q=0.9"
-                }
-            },
-            res => {
-
-                const found = [];
-
-                parseSetCookie(res.headers, found);
-
-                res.resume();
-
-                res.on("end", () => resolve(found));
-            }
-        );
-
-        req.on("error", () => resolve([]));
-
-        req.setTimeout(20000, () => {
-
-            req.destroy();
-            resolve([]);
-        });
-    });
-}
-
-function cleanOldCookieFiles() {
-
-    try {
-
-        const files = fs.readdirSync(os.tmpdir());
-
-        const now = Date.now();
-
-        for (const f of files) {
-
-            if (!f.startsWith("yt_auto_cookies_")) continue;
-
-            const p = path.join(os.tmpdir(), f);
-
-            try {
-
-                const st = fs.statSync(p);
-
-                if (now - st.mtimeMs > 30 * 60 * 1000) {
-
-                    fs.unlinkSync(p);
-                }
-
-            } catch (_) {}
-        }
-
-    } catch (_) {}
-}
-
-async function freshYouTubeCookieFile() {
-
-    try {
-
-        const cookies = await fetchYouTubeCookies();
-
-        if (!cookies || !cookies.length) return "";
-
-        const lines = ["# Netscape HTTP Cookie File"];
-
-        for (const c of cookies) {
-
-            lines.push([
-                c.domain,
-                c.domain.startsWith(".") ? "TRUE" : "FALSE",
-                c.path,
-                c.secure ? "TRUE" : "FALSE",
-                String(c.expires),
-                c.name,
-                c.value || ""
-            ].join("\t"));
-        }
-
-        cleanOldCookieFiles();
-
-        const file = path.join(
-            os.tmpdir(),
-            `yt_auto_cookies_${Date.now()}.txt`
-        );
-
-        fs.writeFileSync(file, lines.join("\n"));
-
-        return file;
-
-    } catch (e) {
-
-        console.error(
-            "auto cookie failed:",
-            e && e.message
-        );
-
-        return "";
-    }
-}
-
-async function youTubeCookieArgs() {
-
-    if (YOUTUBE_COOKIES_FILE &&
-        fs.existsSync(YOUTUBE_COOKIES_FILE)) {
-
-        return ["--cookies", YOUTUBE_COOKIES_FILE];
-    }
-
-    const fresh = await freshYouTubeCookieFile();
-
-    if (fresh) return ["--cookies", fresh];
-
-    return [];
 }
 
 function buildCommonArgs(url, extra = []) {
@@ -686,11 +512,19 @@ async function ytInfoSmart(url) {
 
     const attempts = [];
 
-    let ytCookieArgs = [];
+    if (isYouTubeUrl(url) && YT_API_ENABLED) {
 
-    if (isYouTubeUrl(url)) {
+        try {
 
-        ytCookieArgs = await youTubeCookieArgs();
+            return await ytApi.getInfo(url);
+
+        } catch (e) {
+
+            console.error(
+                "yt-dlp-api info failed, falling back:",
+                e.message
+            );
+        }
     }
 
 
@@ -700,25 +534,6 @@ async function ytInfoSmart(url) {
         "--no-download",
         url
     ]);
-
-
-    if (isYouTubeUrl(url)) {
-
-        for (const client of YT_FALLBACK_CLIENTS) {
-
-            attempts.push([
-                ...ytCookieArgs,
-                ...JS_RUNTIME_ARGS,
-                ...EJS_ARGS,
-                "--extractor-args",
-                `youtube:player-client=${client}`,
-                ...BASE,
-                "--dump-json",
-                "--no-download",
-                url
-            ]);
-        }
-    }
 
 
     if (platform.extractorArgs &&
@@ -790,26 +605,81 @@ async function ytDownloadSmart(
     ]);
 
 
-    if (isYouTubeUrl(url)) {
+    if (isYouTubeUrl(url) && YT_API_ENABLED) {
 
-        const ytCookieArgs = await youTubeCookieArgs();
+        try {
 
-        for (const client of YT_FALLBACK_CLIENTS) {
+            const dlOpts = {};
 
-            attempts.push([
-                ...ytCookieArgs,
-                ...JS_RUNTIME_ARGS,
-                ...EJS_ARGS,
-                "--extractor-args",
-                `youtube:player-client=${client}`,
-                ...BASE,
-                ...optArgs,
-                "--max-filesize",
-                MAX_SIZE,
-                "-o",
-                outTemplate,
-                url
-            ]);
+            const argStr = (optArgs || []).join(" ");
+
+            if (/--audio-format\s+m4a/i.test(argStr)) {
+
+                dlOpts.extract_audio = true;
+                dlOpts.audio_format = "m4a";
+
+            } else if (/-x/.test(argStr)) {
+
+                dlOpts.extract_audio = true;
+                dlOpts.audio_format = "mp3";
+
+            } else {
+
+                let maxH = 1080;
+
+                const hm = argStr.match(/height<=(\d+)/);
+
+                if (hm) maxH = parseInt(hm[1], 10);
+
+                try {
+
+                    const fmts = await ytApi.getFormats(url);
+
+                    let best = null;
+
+                    for (const f of fmts) {
+
+                        const h = parseInt(
+                            String(f.resolution || "").split("x")[1] || "0",
+                            10
+                        );
+
+                        if (h > 0 && h <= maxH) {
+
+                            if (!best || h > parseInt(
+                                String(best.resolution || "").split("x")[1] || "0",
+                                10
+                            )) {
+
+                                best = f;
+                            }
+                        }
+                    }
+
+                    if (best) dlOpts.format_id = best.format_id;
+
+                } catch (_) {}
+            }
+
+            const stamp = path.basename(outTemplate).split(".")[0];
+
+            const destDir = path.dirname(outTemplate);
+
+            await ytApi.downloadToDir(
+                url,
+                dlOpts,
+                destDir,
+                stamp
+            );
+
+            return;
+
+        } catch (e) {
+
+            console.error(
+                "yt-dlp-api download failed, falling back:",
+                e.message
+            );
         }
     }
 
@@ -1770,10 +1640,10 @@ console.log(
 );
 
 console.log(
-    `🍪 YouTube cookies: ${
-        YOUTUBE_COOKIES_FILE
-            ? "manual file"
-            : "auto-generate"
+    `🎬 YouTube via yt-dlp-api: ${
+        YT_API_ENABLED
+            ? ytApi.API_URL
+            : "disabled (direct yt-dlp)"
     }`
 );
 
