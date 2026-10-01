@@ -27,10 +27,29 @@ try {
     }
 }
 
-const YOUTUBE_COOKIES_FILE =
+let YOUTUBE_COOKIES_FILE =
     config.YOUTUBE_COOKIES_FILE ||
     process.env.YOUTUBE_COOKIES_FILE ||
     "";
+
+if (!YOUTUBE_COOKIES_FILE && process.env.YOUTUBE_COOKIES_B64) {
+
+    try {
+
+        const buf = Buffer.from(
+            process.env.YOUTUBE_COOKIES_B64,
+            "base64"
+        );
+
+        YOUTUBE_COOKIES_FILE = path.join(
+            os.tmpdir(),
+            "youtube_cookies.txt"
+        );
+
+        fs.writeFileSync(YOUTUBE_COOKIES_FILE, buf);
+
+    } catch (_) {}
+}
 
 const YOUTUBE_PO_TOKEN =
     config.YOUTUBE_PO_TOKEN ||
@@ -65,6 +84,13 @@ if (commandExists("deno")) {
 const EJS_ARGS = [
     "--remote-components",
     "ejs:github"
+];
+
+const YT_FALLBACK_CLIENTS = [
+    "android",
+    "ios",
+    "tv_embedded",
+    "mweb"
 ];
 
 const bot = new TelegramBot(TOKEN, {
@@ -500,16 +526,19 @@ async function ytInfoSmart(url) {
 
     if (isYouTubeUrl(url)) {
 
-        attempts.push([
-            ...JS_RUNTIME_ARGS,
-            ...EJS_ARGS,
-            "--extractor-args",
-            "youtube:player-client=android",
-            ...BASE,
-            "--dump-json",
-            "--no-download",
-            url
-        ]);
+        for (const client of YT_FALLBACK_CLIENTS) {
+
+            attempts.push([
+                ...JS_RUNTIME_ARGS,
+                ...EJS_ARGS,
+                "--extractor-args",
+                `youtube:player-client=${client}`,
+                ...BASE,
+                "--dump-json",
+                "--no-download",
+                url
+            ]);
+        }
     }
 
 
@@ -584,19 +613,22 @@ async function ytDownloadSmart(
 
     if (isYouTubeUrl(url)) {
 
-        attempts.push([
-            ...JS_RUNTIME_ARGS,
-            ...EJS_ARGS,
-            "--extractor-args",
-            "youtube:player-client=android",
-            ...BASE,
-            ...optArgs,
-            "--max-filesize",
-            MAX_SIZE,
-            "-o",
-            outTemplate,
-            url
-        ]);
+        for (const client of YT_FALLBACK_CLIENTS) {
+
+            attempts.push([
+                ...JS_RUNTIME_ARGS,
+                ...EJS_ARGS,
+                "--extractor-args",
+                `youtube:player-client=${client}`,
+                ...BASE,
+                ...optArgs,
+                "--max-filesize",
+                MAX_SIZE,
+                "-o",
+                outTemplate,
+                url
+            ]);
+        }
     }
 
     let lastError;
@@ -702,10 +734,14 @@ async function showQuality(
 
             friendly =
                 "❌ YouTube verification/block detected.\n\n" +
-                "yt-dlp/EJS দিয়ে আবার চেষ্টা করা হয়েছে, " +
-                "কিন্তু YouTube এই request accept করেনি.\n\n" +
-                "💡 yt-dlp, EJS এবং JavaScript runtime update করে " +
-                "আবার চেষ্টা করো.";
+                "সব player client (android/ios/tv/mweb) দিয়ে চেষ্টা " +
+                "করা হয়েছে, কিন্তু YouTube এই IP থেকে request " +
+                "accept করেনি.\n\n" +
+                "💡 Fix: YouTube cookies add করো.\n" +
+                "1. PC/phone browser থেকে cookies.txt export করো\n" +
+                "2. GitHub repo Settings → Secrets → " +
+                "YOUTUBE_COOKIES নামে add করো\n" +
+                "3. Workflow আবার run করো";
 
         } else {
 
