@@ -68,27 +68,19 @@ const OPTIONS = {
 const BASE = ["--no-warnings", "--no-playlist"];
 const MAX_SIZE = config.MAX_SIZE || "48M";
 
-bot.onText(/\/start/, (msg) => {
-    tg(() => bot.sendMessage(msg.chat.id,
-        "👋 All-in-One Downloader\n\n" +
-        "Jekono video link pathao — ami download kore dibo.\n" +
-        "📺 YouTube • 🎵 TikTok • 📘 Facebook • 📸 Instagram • 🐦 X • 📌 Pinterest • 💼 LinkedIn\n\n" +
-        "Full HD video ba MP3/M4A audio — option tomake dibo.")).catch(() => {});
-});
+function qualityKeyboard(url) {
+    return [
+        [{ text: "🎬 360p", callback_data: `dl|v360|${url}` },
+         { text: "🎬 720p HD", callback_data: `dl|v720|${url}` }],
+        [{ text: "🎬 1080p Full HD", callback_data: `dl|v1080|${url}` }],
+        [{ text: "🎵 MP3 128k", callback_data: `dl|mp3|${url}` },
+         { text: "🎵 MP3 320k", callback_data: `dl|mp32|${url}` },
+         { text: "🎵 M4A", callback_data: `dl|m4a|${url}` }],
+    ];
+}
 
-bot.on("message", async (msg) => {
-    if (!msg.text || msg.text.startsWith("/")) return;
-    const links = msg.text.match(/(https?:\/\/[^\s]+)/g);
-    if (!links) return;
-    const url = links[0];
-    const chatId = msg.chat.id;
+async function showQuality(chatId, url, waitMsg) {
     const platform = detectPlatform(url);
-
-    let waitMsg;
-    try {
-        waitMsg = await tg(() => bot.sendMessage(chatId, "🔎 Video info anche..."));
-    } catch (_) { return; }
-
     let info;
     try {
         const out = await ytdlp([...platform.extractorArgs, ...BASE, "--dump-json", "--no-download", url], 90000);
@@ -101,31 +93,79 @@ bot.on("message", async (msg) => {
         try { await tg(() => bot.editMessageText(friendly, { chat_id: chatId, message_id: waitMsg.message_id })); } catch (_) {}
         return;
     }
-
     const title = (info.title || "Video").slice(0, 100);
-    const keyboard = [
-        [{ text: "🎬 360p", callback_data: `dl|v360|${url}` },
-         { text: "🎬 720p HD", callback_data: `dl|v720|${url}` }],
-        [{ text: "🎬 1080p Full HD", callback_data: `dl|v1080|${url}` }],
-        [{ text: "🎵 MP3 128k", callback_data: `dl|mp3|${url}` },
-         { text: "🎵 MP3 320k", callback_data: `dl|mp32|${url}` },
-         { text: "🎵 M4A", callback_data: `dl|m4a|${url}` }],
-    ];
+    const caption = `${platform.tag}\n🎬 ${title}\n⏱ ${fmtDur(info.duration)} • 👤 ${(info.uploader || "-").slice(0, 40)}\n\n👇 Quality select koro:`;
+    const keyboard = qualityKeyboard(url);
+    try { await tg(() => bot.deleteMessage(chatId, waitMsg.message_id)); } catch (_) {}
+    try {
+        if (info.thumbnail) {
+            await tg(() => bot.sendPhoto(chatId, info.thumbnail, { caption, reply_markup: { inline_keyboard: keyboard } }));
+        } else {
+            await tg(() => bot.sendMessage(chatId, caption, { reply_markup: { inline_keyboard: keyboard } }));
+        }
+    } catch (_) {}
+}
 
+async function ytSearch(chatId, query, waitMsg) {
+    let out;
+    try {
+        out = await ytdlp(["--no-warnings", "--dump-json", "--flat-playlist", "--no-download", `ytsearch5:${query}`], 90000);
+    } catch (e) {
+        try { await tg(() => bot.editMessageText("❌ Search failed. Abar try koro.", { chat_id: chatId, message_id: waitMsg.message_id })); } catch (_) {}
+        return;
+    }
+    const items = out.trim().split("\n")
+        .map(l => { try { return JSON.parse(l); } catch (_) { return null; } })
+        .filter(v => v && v.id)
+        .slice(0, 5);
+    if (!items.length) {
+        try { await tg(() => bot.editMessageText("❌ Kichu pawa jayni. Onno nam likho.", { chat_id: chatId, message_id: waitMsg.message_id })); } catch (_) {}
+        return;
+    }
+    const keyboard = items.map(v => [{ text: `🎬 ${(v.title || "Video").slice(0, 45)} (${fmtDur(v.duration)})`, callback_data: `sr|${v.id}` }]);
     try {
         await tg(() => bot.editMessageText(
-            `${platform.tag}\n🎬 ${title}\n⏱ ${fmtDur(info.duration)} • 👤 ${(info.uploader || "-").slice(0, 40)}\n\n👇 Quality select koro:`,
+            `🔍 "${query.slice(0, 50)}"\n\n👇 Video select koro:`,
             { chat_id: chatId, message_id: waitMsg.message_id, reply_markup: { inline_keyboard: keyboard } }
         ));
     } catch (_) {}
+}
+
+bot.onText(/\/start/, (msg) => {
+    tg(() => bot.sendMessage(msg.chat.id,
+        "👋 All-in-One Downloader\n\n" +
+        "🔍 Jekono gan ba video r nam likho — ami YouTube e search kore dibo.\n" +
+        "🔗 Ba sorasori link pathao.\n\n" +
+        "📺 YouTube • 🎵 TikTok • 📘 Facebook • 📸 Instagram • 🐦 X • 📌 Pinterest • 💼 LinkedIn\n\n" +
+        "Full HD video ba MP3/M4A audio — option tomake dibo.")).catch(() => {});
+});
+
+bot.on("message", async (msg) => {
+    if (!msg.text || msg.text.startsWith("/")) return;
+    const chatId = msg.chat.id;
+    const links = msg.text.match(/(https?:\/\/[^\s]+)/g);
+    let waitMsg;
+    try {
+        waitMsg = await tg(() => bot.sendMessage(chatId, "🔎 Khujchi..."));
+    } catch (_) { return; }
+    if (links) await showQuality(chatId, links[0], waitMsg);
+    else await ytSearch(chatId, msg.text.trim(), waitMsg);
 });
 
 bot.on("callback_query", async (q) => {
-    const [action, optKey, ...urlParts] = (q.data || "").split("|");
-    if (action !== "dl" || !OPTIONS[optKey]) { tg(() => bot.answerCallbackQuery(q.id)).catch(() => {}); return; }
-    const url = urlParts.join("|");
+    const [action, arg, ...rest] = (q.data || "").split("|");
     const chatId = q.message.chat.id;
-    const opt = OPTIONS[optKey];
+    if (action === "sr" && arg) {
+        await tg(() => bot.answerCallbackQuery(q.id)).catch(() => {});
+        let waitMsg;
+        try { waitMsg = await tg(() => bot.sendMessage(chatId, "🔎 Video info anche...")); } catch (_) { return; }
+        try { await tg(() => bot.deleteMessage(chatId, q.message.message_id)); } catch (_) {}
+        await showQuality(chatId, `https://www.youtube.com/watch?v=${arg}`, waitMsg);
+        return;
+    }
+    if (action !== "dl" || !OPTIONS[arg]) { tg(() => bot.answerCallbackQuery(q.id)).catch(() => {}); return; }
+    const url = rest.join("|");
+    const opt = OPTIONS[arg];
     const platform = detectPlatform(url);
 
     await tg(() => bot.answerCallbackQuery(q.id, { text: `⏳ ${opt.label} download hocche...` })).catch(() => {});
