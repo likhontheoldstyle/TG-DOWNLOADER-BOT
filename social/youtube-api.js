@@ -78,13 +78,13 @@ async function apiHealth() {
 
     try {
 
-        const h = await apiRequest("GET", "/health");
+        await apiRequest("GET", "/health");
 
-        return h && h.status !== undefined;
+        return true;
 
-    } catch (_) {
+    } catch (e) {
 
-        return false;
+        return e && e.statusCode === 503;
     }
 }
 
