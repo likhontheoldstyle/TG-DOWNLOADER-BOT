@@ -1,9 +1,9 @@
 services:
   - type: worker
     name: tg-downloader-bot
-    runtime: node
-    buildCommand: npm install && apt-get update -qq && apt-get install -y -qq ffmpeg && curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp
-    startCommand: node main/index.js
+    runtime: python
+    buildCommand: pip install -r requirements.txt && apt-get update -qq && apt-get install -y -qq ffmpeg && curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod +x /usr/local/bin/yt-dlp
+    startCommand: python bot/main.py
     envVars:
-      - key: NODE_VERSION
-        value: 20
+      - key: PYTHON_VERSION
+        value: 3.12.0
